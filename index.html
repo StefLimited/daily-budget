@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Daily Budget">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Daily Budget</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --text:#14161a; --muted:#6b7280; --line:#e5e7eb;
+  --key:#ffffff; --keyActive:#e5e7eb; --pos:#15803d; --neg:#dc2626; --accent:#14161a; --accentText:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1115; --card:#181b21; --text:#f3f4f6; --muted:#9ca3af; --line:#272b33;
+    --key:#1f232a; --keyActive:#2d323b; --pos:#4ade80; --neg:#f87171; --accent:#f3f4f6; --accentText:#0f1115; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;}
+body{padding:env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);max-width:520px;margin:0 auto;}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 0 4px}
+.period{font-size:13px;color:var(--muted)}
+.gear{font-size:22px;padding:6px 4px;color:var(--muted)}
+.hero{text-align:center;padding:10px 0 6px}
+.hero .label{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hero .amt{font-size:56px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.sub{display:flex;justify-content:center;gap:14px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.entry-amt{margin:14px 0 8px;background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.entry-amt .val{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums}
+.entry-amt .val.zero{color:var(--muted)}
+.notebtn{font-size:14px;color:var(--muted);padding:6px 8px}
+#noteInput{display:none;width:100%;margin:0 0 8px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--card);color:var(--text);font-size:16px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{background:var(--key);border:1px solid var(--line);border-radius:14px;height:58px;font-size:26px;font-weight:500}
+.pad button:active{background:var(--keyActive)}
+.log{width:100%;margin-top:10px;height:58px;border-radius:14px;background:var(--accent);color:var(--accentText);
+  font-size:19px;font-weight:600}
+.log:disabled{opacity:.35}
+h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.list{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-top:1px solid var(--line);width:100%;text-align:left}
+.row:first-child{border-top:0}
+.row .t{font-size:13px;color:var(--muted)} .row .n{font-size:15px} .row .a{font-weight:600;font-variant-numeric:tabular-nums}
+.empty{padding:16px;color:var(--muted);font-size:14px;text-align:center}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.sheet-bg.show{display:flex}
+.sheet{background:var(--bg);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px);
+  max-height:92vh;overflow:auto}
+.sheet h2{margin:0 0 4px;font-size:20px}
+.sheet p.help{margin:0 0 14px;color:var(--muted);font-size:14px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);
+  font-size:17px;-webkit-appearance:none;appearance:none;min-height:46px}
+.two{display:flex;gap:8px} .two > *{flex:1}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;margin-top:8px}
+.seg button{flex:1;padding:9px 6px;border-radius:9px;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--accent);color:var(--accentText)}
+.actions{display:flex;gap:8px;margin-top:6px}
+.actions button{flex:1;height:50px;border-radius:12px;font-weight:600;font-size:16px}
+.primary{background:var(--accent);color:var(--accentText)}
+.secondary{background:var(--card);border:1px solid var(--line)!important}
+.danger{color:var(--neg);background:var(--card);border:1px solid var(--line)!important}
+.err{color:var(--neg);font-size:14px;min-height:18px;margin:0 0 8px}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 12px);transform:translateX(-50%) translateY(-80px);
+  background:var(--accent);color:var(--accentText);padding:10px 18px;border-radius:999px;font-size:15px;font-weight:600;
+  transition:transform .25s ease;z-index:20}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.notice{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--muted);margin-top:10px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="period" id="periodLabel"></div>
+  <button class="gear" id="gearBtn" aria-label="Settings">⚙︎</button>
+</div>
+
+<div class="hero">
+  <div class="label">Remaining today</div>
+  <div class="amt" id="remaining">$0.00</div>
+  <div class="sub" id="sub"></div>
+</div>
+<div id="notStarted" class="notice" style="display:none"></div>
+
+<div class="entry-amt">
+  <div class="val zero" id="entryVal">$0.00</div>
+  <button class="notebtn" id="noteToggle">+ Note</button>
+</div>
+<input id="noteInput" type="text" placeholder="Note (optional)" maxlength="80" autocomplete="off">
+
+<div class="pad" id="pad">
+  <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+  <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+  <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+  <button data-k="clear" style="font-size:16px">Clear</button><button data-k="0">0</button><button data-k="back" aria-label="Delete">⌫</button>
+</div>
+<button class="log" id="logBtn" disabled>Log spend</button>
+
+<h3>Today</h3>
+<div class="list" id="todayList"></div>
+
+<!-- Settings sheet -->
+<div class="sheet-bg" id="settingsBg">
+  <div class="sheet">
+    <h2 id="settingsTitle">Settings</h2>
+    <p class="help" id="settingsHelp">All times are Pacific.</p>
+    <div class="field">
+      <label for="sBudget">Daily budget ($)</label>
+      <input id="sBudget" type="number" inputmode="decimal" step="0.01" min="0">
+      <div class="seg" id="scopeSeg">
+        <button data-scope="period" class="on">This pay period only</button>
+        <button data-scope="permanent">From now on</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="sReset">Daily reset time</label>
+      <input id="sReset" type="time">
+    </div>
+    <div class="field">
+      <label for="sStart">Pay period start date</label>
+      <input id="sStart" type="date">
+    </div>
+    <div class="field">
+      <label>Pay period reset (date and time)</label>
+      <div class="two"><input id="sPayDate" type="date"><input id="sPayTime" type="time"></div>
+    </div>
+    <p class="err" id="sErr"></p>
+    <div class="actions">
+      <button class="secondary" id="sCancel">Cancel</button>
+      <button class="primary" id="sSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit entry sheet -->
+<div class="sheet-bg" id="editBg">
+  <div class="sheet">
+    <h2>Edit entry</h2>
+    <p class="help" id="editWhen"></p>
+    <div class="field"><label for="eAmt">Amount ($)</label><input id="eAmt" type="number" inputmode="decimal" step="0.01" min="0"></div>
+    <div class="field"><label for="eNote">Note (optional)</label><input id="eNote" type="text" maxlength="80"></div>
+    <p class="err" id="eErr"></p>
+    <div class="actions">
+      <button class="danger" id="eDelete">Delete</button>
+      <button class="secondary" id="eCancel">Cancel</button>
+      <button class="primary" id="eSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="engine.js"></script>
+<script>
+(function(){
+  const E = window.BudgetEngine;
+  const KEY = 'dailyBudget.v1';
+  const $ = id => document.getElementById(id);
+
+  // ---------- storage ----------
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e){ return null; } }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){ toast('Could not save on this device'); } }
+  let state = load();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+  // ---------- formatting ----------
+  const money = c => (c < 0 ? '-' : '') + '$' + (Math.abs(c)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const dtFmt = new Intl.DateTimeFormat('en-US',{timeZone:E.TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const dFmt = new Intl.DateTimeFormat('en-US',{timeZone:E.TZ,weekday:'short',month:'short',day:'numeric'});
+  const tFmt = new Intl.DateTimeFormat('en-US',{timeZone:E.TZ,hour:'numeric',minute:'2-digit'});
+  const pad2 = n => String(n).padStart(2,'0');
+  const dateStr = ms => { const p = E.parts(ms); return `${p.y}-${pad2(p.m)}-${pad2(p.d)}`; };
+  const timeStr = ms => { const p = E.parts(ms); return `${pad2(p.h)}:${pad2(p.mi)}`; };
+  const toCents = v => { const n = Math.round(parseFloat(v) * 100); return isFinite(n) ? n : NaN; };
+
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1800); }
+
+  // ---------- entry keypad ----------
+  let digits = '';
+  function entryCents(){ return digits ? parseInt(digits,10) : 0; }
+  function renderEntry(){
+    const c = entryCents();
+    $('entryVal').textContent = money(c);
+    $('entryVal').classList.toggle('zero', c === 0);
+    $('logBtn').disabled = c === 0 || !state;
+  }
+  $('pad').addEventListener('click', e => {
+    const k = e.target.closest('button')?.dataset.k; if (!k) return;
+    if (k === 'back') digits = digits.slice(0,-1);
+    else if (k === 'clear') digits = '';
+    else if (digits.length < 7) digits = (digits + k).replace(/^0+/,'');
+    renderEntry();
+  });
+  $('noteToggle').addEventListener('click', () => {
+    const n = $('noteInput'); const show = n.style.display !== 'block';
+    n.style.display = show ? 'block' : 'none'; if (show) n.focus();
+  });
+
+  function addEntry(cents, note){
+    state.entries.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), at: Date.now(), amount: cents, note: (note||'').trim(), source: 'manual' });
+    save(); render();
+  }
+  $('logBtn').addEventListener('click', () => {
+    const c = entryCents(); if (!c) return;
+    addEntry(c, $('noteInput').value);
+    digits = ''; $('noteInput').value = ''; $('noteInput').style.display = 'none';
+    renderEntry(); toast('Logged ' + money(c));
+  });
+
+  // ---------- main render ----------
+  function render(){
+    if (!state) return;
+    const now = Date.now();
+    const r = E.compute(state, now);
+    $('remaining').textContent = money(r.remaining);
+    $('remaining').className = 'amt ' + (r.remaining < 0 ? 'neg' : 'pos');
+    $('sub').innerHTML = r.started
+      ? `<span>Today ${money(r.todayBudget)}</span><span>Carried in ${money(r.carryIn)}</span><span>Spent ${money(r.spentToday)}</span>`
+      : '';
+    $('notStarted').style.display = r.started ? 'none' : 'block';
+    if (!r.started) $('notStarted').textContent = 'Tracking starts ' + dtFmt.format(r.trackingStart);
+    $('periodLabel').textContent = r.periodEnd ? `Pay period resets ${dFmt.format(r.periodEnd)}, ${tFmt.format(r.periodEnd)}` : '';
+    const list = $('todayList');
+    if (!r.todays.length) { list.innerHTML = '<div class="empty">No spending logged today</div>'; return; }
+    list.innerHTML = '';
+    for (const e of r.todays) {
+      const b = document.createElement('button'); b.className = 'row';
+      b.innerHTML = `<div><div class="n"></div><div class="t">${tFmt.format(e.at)}</div></div><div class="a">${money(e.amount)}</div>`;
+      b.querySelector('.n').textContent = e.note || 'Spend';
+      b.addEventListener('click', () => openEdit(e.id));
+      list.appendChild(b);
+    }
+  }
+
+  // ---------- edit / delete ----------
+  let editingId = null;
+  function openEdit(id){
+    const e = state.entries.find(x => x.id === id); if (!e) return;
+    editingId = id;
+    $('editWhen').textContent = 'Logged ' + dtFmt.format(e.at);
+    $('eAmt').value = (e.amount/100).toFixed(2); $('eNote').value = e.note || ''; $('eErr').textContent = '';
+    $('editBg').classList.add('show');
+  }
+  function closeEdit(){ $('editBg').classList.remove('show'); editingId = null; }
+  $('eCancel').addEventListener('click', closeEdit);
+  $('eSave').addEventListener('click', () => {
+    const c = toCents($('eAmt').value);
+    if (!(c > 0)) { $('eErr').textContent = 'Enter an amount greater than $0.'; return; }
+    const e = state.entries.find(x => x.id === editingId); e.amount = c; e.note = $('eNote').value.trim();
+    save(); closeEdit(); render(); toast('Entry updated');
+  });
+  $('eDelete').addEventListener('click', () => {
+    if (!confirm('Delete this entry?')) return;
+    state.entries = state.entries.filter(x => x.id !== editingId);
+    save(); closeEdit(); render(); toast('Entry deleted');
+  });
+
+  // ---------- settings ----------
+  let scope = 'period', prefill = null;
+  $('scopeSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    scope = b.dataset.scope;
+    [...$('scopeSeg').children].forEach(x => x.classList.toggle('on', x === b));
+  });
+  function openSettings(){
+    $('sErr').textContent = '';
+    const first = !state;
+    $('settingsTitle').textContent = first ? 'Set up your budget' : 'Settings';
+    $('sCancel').style.display = first ? 'none' : '';
+    $('scopeSeg').style.display = first ? 'none' : 'flex';
+    if (first) {
+      prefill = null;
+      $('sBudget').value = ''; $('sReset').value = '03:00'; $('sStart').value = dateStr(Date.now());
+      $('sPayDate').value = ''; $('sPayTime').value = '23:00';
+    } else {
+      const now = Date.now(), s = state.settings;
+      const rt = [...s.resetTimeHistory].sort((a,b)=>a.at-b.at).pop();
+      const sch = [...s.scheduleHistory].sort((a,b)=>a.at-b.at).pop();
+      const nextPay = E.nextPeriodBoundary(s, now) ?? sch.resetAt;
+      prefill = { budget: E.budgetAt(s, now), reset: `${pad2(rt.hour)}:${pad2(rt.minute)}`, start: sch.startDate,
+                  payDate: dateStr(nextPay), payTime: timeStr(nextPay) };
+      $('sBudget').value = (prefill.budget/100).toFixed(2); $('sReset').value = prefill.reset; $('sStart').value = prefill.start;
+      $('sPayDate').value = prefill.payDate; $('sPayTime').value = prefill.payTime;
+      scope = 'period'; [...$('scopeSeg').children].forEach(x => x.classList.toggle('on', x.dataset.scope === 'period'));
+    }
+    $('settingsBg').classList.add('show');
+  }
+  $('gearBtn').addEventListener('click', openSettings);
+  $('sCancel').addEventListener('click', () => $('settingsBg').classList.remove('show'));
+  $('sSave').addEventListener('click', () => {
+    const budget = toCents($('sBudget').value), reset = $('sReset').value, start = $('sStart').value,
+          payDate = $('sPayDate').value, payTime = $('sPayTime').value;
+    if (!(budget > 0)) return $('sErr').textContent = 'Enter a daily budget greater than $0.';
+    if (!reset || !start || !payDate || !payTime) return $('sErr').textContent = 'Fill in every field.';
+    const [rh, rm] = reset.split(':').map(Number);
+    const [py, pm, pd] = payDate.split('-').map(Number); const [ph, pmi] = payTime.split(':').map(Number);
+    const resetAt = E.zoned(py, pm, pd, ph, pmi);
+    const [sy, sm, sd] = start.split('-').map(Number);
+    if (resetAt <= E.zoned(sy, sm, sd, rh, rm)) return $('sErr').textContent = 'Pay period reset must be after the start date.';
+
+    if (!state) {
+      state = { version: 1, settings: {
+        budgetHistory: [{ at: 0, amount: budget, scope: 'permanent' }],
+        resetTimeHistory: [{ at: 0, hour: rh, minute: rm }],
+        scheduleHistory: [{ at: 0, startDate: start, resetAt }]
+      }, entries: [] };
+    } else {
+      const now = Date.now(), s = state.settings;
+      const lastB = [...s.budgetHistory].sort((a,b)=>a.at-b.at).pop();
+      const overrideActive = lastB.scope === 'period' && lastB.until > now;
+      if (scope === 'period' && budget !== prefill.budget)
+        s.budgetHistory.push({ at: now, amount: budget, scope: 'period', until: E.nextPeriodBoundary(s, now) ?? 8.64e15 });
+      else if (scope === 'permanent' && (budget !== prefill.budget || overrideActive))
+        s.budgetHistory.push({ at: now, amount: budget, scope: 'permanent' });
+      if (reset !== prefill.reset) s.resetTimeHistory.push({ at: now, hour: rh, minute: rm });
+      if (start !== prefill.start || payDate !== prefill.payDate || payTime !== prefill.payTime)
+        s.scheduleHistory.push({ at: now, startDate: start, resetAt });
+    }
+    save(); $('settingsBg').classList.remove('show'); render(); renderEntry(); toast('Settings saved');
+  });
+
+  // ---------- quick log from Shortcut: ?add=12.50&note=coffee ----------
+  function handleUrl(){
+    const q = new URLSearchParams(location.search);
+    if (!q.has('add')) return;
+    const c = toCents(q.get('add'));
+    history.replaceState(null, '', location.pathname);
+    if (!state) { toast('Set up your budget first'); return; }
+    if (c > 0) { addEntry(c, q.get('note') || ''); toast('Logged ' + money(c)); }
+    else toast('Invalid amount');
+  }
+
+  // ---------- boot ----------
+  if (!state) openSettings();
+  handleUrl(); render(); renderEntry();
+  setInterval(render, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
