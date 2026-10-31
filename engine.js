@@ -78,7 +78,9 @@
       const lo = Math.max(hist[i].at, start);
       const hi = i + 1 < hist.length ? hist[i + 1].at : Infinity;
       const p = parts(hist[i].resetAt);
-      for (let k = 0; k < 2000; k++) {
+      // the payday date can be any past or future payday; step every 14 days in both directions from it
+      const kStart = Math.floor((lo - hist[i].resetAt) / (DAY_STEP * 86400000)) - 1;
+      for (let k = kStart; k < kStart + 2000; k++) {
         const dd = addDays(p.y, p.m, p.d, k * DAY_STEP);
         const t = zoned(dd.y, dd.m, dd.d, p.h, p.mi);
         if (t >= hi || t > to) break;
