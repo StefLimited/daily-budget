@@ -119,4 +119,23 @@ check('past payday anchor: next reset 14 days later', E.compute(s, z(2026, 10, 3
 s.settings.scheduleHistory[0].resetAt = z(2026, 12, 10, 23);
 check('future payday anchor: earlier resets found', E.compute(s, z(2026, 10, 30, 17)).periodEnd, z(2026, 11, 12, 23));
 
+// Weekend bump: $20 extra on Sat and Sun. Fri Oct 23, Sat 24, Sun 25, Mon 26.
+function wk() { const st = base(); st.settings.weekendHistory = [{ at: 0, amount: 2000 }]; return st; }
+s = wk();
+check('weekday has no bump', E.compute(s, z(2026, 10, 23, 10)).todayBudget, 5000);
+check('Saturday budget includes bump', E.compute(s, z(2026, 10, 24, 10)).todayBudget, 7000);
+check('weekend surplus rolls Sat to Sun', E.compute(s, z(2026, 10, 25, 10)).remaining, 5000 + 7000 + 7000);
+check('unused bump dropped at Monday', E.compute(s, z(2026, 10, 26, 10)).remaining, 5000 + 5000 + 5000 + 5000);
+s = wk();
+spend(s, z(2026, 10, 24, 12), 6000);
+spend(s, z(2026, 10, 25, 12), 9000);
+check('bump spent first, real base surplus still carries', E.compute(s, z(2026, 10, 26, 10)).remaining, 4000 + 5000);
+s = wk();
+spend(s, z(2026, 10, 23, 12), 12000);
+check('weekday overspend reduces Saturday', E.compute(s, z(2026, 10, 24, 10)).remaining, 0);
+check('debt paid by base, unused bump still dropped', E.compute(s, z(2026, 10, 26, 10)).remaining, 3000 + 5000);
+check('history marks dropped bump on Sunday', E.history(s, z(2026, 10, 26, 10)).days[1].bumpDropped, 4000);
+s = base();
+check('no weekend setting = no bump', E.compute(s, z(2026, 10, 24, 10)).todayBudget, 5000);
+
 console.log(`\n${pass} checks passed`);

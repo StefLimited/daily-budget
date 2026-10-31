@@ -105,65 +105,89 @@
     return override && t < override.until ? override.amount : base;
   }
 
-  function compute(state, now) {
-    const s = state.settings;
-    const start = trackingStart(s);
-    const events = [];
-    for (const t of periodBoundaries(s, now)) events.push({ t, k: 0 });
-    for (const t of dailyBoundaries(s, now)) events.push({ t, k: 1, amt: budgetAt(s, t) });
-    for (const e of state.entries) if (e.at >= start && e.at <= now) events.push({ t: e.at, k: 2, amt: e.amount });
-    events.sort((a, b) => a.t - b.t || a.k - b.k);
-
-    let bal = 0, lastDaily = null, carryIn = 0, todayBudget = 0, lastPeriod = null;
-    for (const e of events) {
-      if (e.k === 0) { if (bal > 0) bal = 0; lastPeriod = e.t; }
-      else if (e.k === 1) { carryIn = bal; todayBudget = e.amt; bal += e.amt; lastDaily = e.t; }
-      else bal -= e.amt;
-    }
-    const dayStart = lastDaily ?? start;
-    const todays = state.entries.filter(e => e.at >= dayStart && e.at <= now).sort((a, b) => b.at - a.at);
-    const futureDaily = dailyBoundaries(s, now + 86400000 * 3).find(t => t > now) ?? null;
-    return {
-      started: now >= start,
-      trackingStart: start,
-      remaining: bal,
-      carryIn, todayBudget,
-      spentToday: todays.reduce((a, e) => a + e.amount, 0),
-      todays,
-      periodStart: lastPeriod ?? start,
-      periodEnd: nextPeriodBoundary(s, now),
-      nextDailyReset: futureDaily,
-      currentBudget: budgetAt(s, now)
-    };
+  // Weekend bump: extra per day on Saturday and Sunday. Applies forward from each change.
+  function bumpAt(s, t) {
+    let v = 0;
+    for (const b of sortAt(s.weekendHistory || [])) { if (b.at > t) break; v = b.amount; }
+    return v;
   }
+  function weekday(t) { const p = parts(t); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); }
 
-  // Day-by-day history, newest first. Each day: start, budget, carryIn, spent, entries, endBalance.
-  // Spends before the tracking start are returned separately as `uncounted`.
-  function history(state, now) {
+  // Single pass over pay resets, daily credits and spends.
+  // Weekend bump rules: spending uses the bump first; whatever bump is still unspent when
+  // the next weekday starts is removed, so it never carries into the week. Overspending
+  // carried in from the week still reduces the weekend.
+  function walk(state, now) {
     const s = state.settings;
     const start = trackingStart(s);
     const events = [];
     for (const t of periodBoundaries(s, now)) events.push({ t, k: 0 });
-    for (const t of dailyBoundaries(s, now)) events.push({ t, k: 1, amt: budgetAt(s, t) });
+    for (const t of dailyBoundaries(s, now)) {
+      const dow = weekday(t), weekend = dow === 6 || dow === 0;
+      events.push({ t, k: 1, amt: budgetAt(s, t), bump: weekend ? bumpAt(s, t) : 0, weekend });
+    }
     for (const e of state.entries) if (e.at >= start && e.at <= now) events.push({ t: e.at, k: 2, e });
     events.sort((a, b) => a.t - b.t || a.k - b.k);
     const days = [];
-    let bal = 0, cur = null;
+    let bal = 0, pool = 0, cur = null, lastPeriod = null;
     for (const ev of events) {
-      if (ev.k === 0) { if (bal > 0) bal = 0; if (cur) cur.periodReset = true; }
-      else if (ev.k === 1) {
+      if (ev.k === 0) {
+        if (bal > 0) bal = 0;
+        pool = Math.min(pool, Math.max(bal, 0));
+        lastPeriod = ev.t;
+        if (cur) cur.periodReset = true;
+      } else if (ev.k === 1) {
+        if (!ev.weekend && pool > 0) {
+          const dropped = Math.min(Math.max(bal, 0), pool);
+          bal -= dropped; pool = 0;
+          if (cur) cur.bumpDropped = dropped;
+        }
         if (cur) cur.endBalance = bal;
-        cur = { start: ev.t, budget: ev.amt, carryIn: bal, spent: 0, entries: [], periodReset: false };
+        cur = { start: ev.t, budget: ev.amt, bump: ev.bump, weekend: ev.weekend, carryIn: bal, spent: 0,
+                entries: [], periodReset: false, bumpDropped: 0 };
         days.push(cur);
-        bal += ev.amt;
-      } else if (cur) { bal -= ev.e.amount; cur.spent += ev.e.amount; cur.entries.push(ev.e); }
+        bal += ev.amt + ev.bump;
+        pool += ev.bump;
+      } else if (cur) {
+        bal -= ev.e.amount; cur.spent += ev.e.amount; cur.entries.push(ev.e);
+        pool -= Math.min(pool, ev.e.amount);
+      }
     }
     if (cur) cur.endBalance = bal;
-    for (const d of days) d.entries.sort((a, b) => b.at - a.at);
-    const uncounted = state.entries.filter(e => e.at < start).sort((a, b) => b.at - a.at);
-    return { days: days.reverse(), uncounted };
+    return { days, bal, lastPeriod, start, cur };
   }
 
-  root.BudgetEngine = { TZ, parts, zoned, addDays, compute, history, budgetAt, nextPeriodBoundary, trackingStart, dailyBoundaries, periodBoundaries };
+  function compute(state, now) {
+    const s = state.settings;
+    const w = walk(state, now);
+    const cur = w.cur;
+    const todays = cur ? [...cur.entries].sort((a, b) => b.at - a.at) : [];
+    const futureDaily = dailyBoundaries(s, now + 86400000 * 3).find(t => t > now) ?? null;
+    return {
+      started: now >= w.start,
+      trackingStart: w.start,
+      remaining: w.bal,
+      carryIn: cur ? cur.carryIn : 0,
+      todayBudget: cur ? cur.budget + cur.bump : 0,
+      todayBump: cur ? cur.bump : 0,
+      spentToday: cur ? cur.spent : 0,
+      todays,
+      periodStart: w.lastPeriod ?? w.start,
+      periodEnd: nextPeriodBoundary(s, now),
+      nextDailyReset: futureDaily,
+      currentBudget: budgetAt(s, now),
+      currentBump: bumpAt(s, now)
+    };
+  }
+
+  // Day-by-day history, newest first. Spends before the tracking start are returned as `uncounted`.
+  function history(state, now) {
+    const w = walk(state, now);
+    for (const d of w.days) d.entries.sort((a, b) => b.at - a.at);
+    const uncounted = state.entries.filter(e => e.at < w.start).sort((a, b) => b.at - a.at);
+    return { days: w.days.reverse(), uncounted };
+  }
+
+  root.BudgetEngine = { TZ, parts, zoned, addDays, compute, history, budgetAt, bumpAt, weekday, nextPeriodBoundary, trackingStart, dailyBoundaries, periodBoundaries };
   if (typeof module !== 'undefined') module.exports = root.BudgetEngine;
 })(typeof window !== 'undefined' ? window : globalThis);

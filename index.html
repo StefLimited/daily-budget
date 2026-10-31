@@ -142,6 +142,10 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
       </div>
     </div>
     <div class="field">
+      <label for="sWeekend">Weekend bump ($ extra per day, Sat and Sun)</label>
+      <input id="sWeekend" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+    </div>
+    <div class="field">
       <label for="sReset">Daily reset time</label>
       <input id="sReset" type="time">
     </div>
@@ -248,7 +252,7 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     $('remaining').textContent = money(r.remaining);
     $('remaining').className = 'amt ' + (r.remaining < 0 ? 'neg' : 'pos');
     $('sub').innerHTML = r.started
-      ? `<span>Today ${money(r.todayBudget)}</span><span>Carried in ${money(r.carryIn)}</span><span>Spent ${money(r.spentToday)}</span><span>Counting since ${dFmt.format(r.trackingStart)}</span>`
+      ? `<span>Today ${money(r.todayBudget)}${r.todayBump ? ` (incl. ${money(r.todayBump)} weekend)` : ''}</span><span>Carried in ${money(r.carryIn)}</span><span>Spent ${money(r.spentToday)}</span><span>Counting since ${dFmt.format(r.trackingStart)}</span>`
       : '';
     $('notStarted').style.display = r.started ? 'none' : 'block';
     if (!r.started) $('notStarted').textContent = 'Tracking starts ' + dtFmt.format(r.trackingStart);
@@ -306,16 +310,16 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     $('scopeSeg').style.display = first ? 'none' : 'flex';
     if (first) {
       prefill = null;
-      $('sBudget').value = ''; $('sReset').value = '03:00'; $('sStart').value = dateStr(Date.now());
+      $('sBudget').value = ''; $('sWeekend').value = ''; $('sReset').value = '03:00'; $('sStart').value = dateStr(Date.now());
       $('sPayDate').value = ''; $('sPayTime').value = '23:00';
     } else {
       const now = Date.now(), s = state.settings;
       const rt = [...s.resetTimeHistory].sort((a,b)=>a.at-b.at).pop();
       const sch = [...s.scheduleHistory].sort((a,b)=>a.at-b.at).pop();
       const nextPay = E.nextPeriodBoundary(s, now) ?? sch.resetAt;
-      prefill = { budget: E.budgetAt(s, now), reset: `${pad2(rt.hour)}:${pad2(rt.minute)}`, start: sch.startDate,
+      prefill = { bump: E.bumpAt(s, now), budget: E.budgetAt(s, now), reset: `${pad2(rt.hour)}:${pad2(rt.minute)}`, start: sch.startDate,
                   payDate: dateStr(nextPay), payTime: timeStr(nextPay) };
-      $('sBudget').value = (prefill.budget/100).toFixed(2); $('sReset').value = prefill.reset; $('sStart').value = prefill.start;
+      $('sBudget').value = (prefill.budget/100).toFixed(2); $('sWeekend').value = prefill.bump ? (prefill.bump/100).toFixed(2) : ''; $('sReset').value = prefill.reset; $('sStart').value = prefill.start;
       $('sPayDate').value = prefill.payDate; $('sPayTime').value = prefill.payTime;
       scope = 'period'; [...$('scopeSeg').children].forEach(x => x.classList.toggle('on', x.dataset.scope === 'period'));
     }
@@ -324,9 +328,11 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   $('gearBtn').addEventListener('click', openSettings);
   $('sCancel').addEventListener('click', () => $('settingsBg').classList.remove('show'));
   $('sSave').addEventListener('click', () => {
+    const bump = $('sWeekend').value.trim() === '' ? 0 : toCents($('sWeekend').value);
     const budget = toCents($('sBudget').value), reset = $('sReset').value, start = $('sStart').value,
           payDate = $('sPayDate').value, payTime = $('sPayTime').value;
     if (!(budget > 0)) return showErr('Enter a daily budget greater than $0.');
+    if (!(bump >= 0)) return showErr('Weekend bump must be $0 or more.');
     if (!reset || !start || !payDate || !payTime) return showErr('Fill in every field.');
     const [rh, rm] = reset.split(':').map(Number);
     const [py, pm, pd] = payDate.split('-').map(Number); const [ph, pmi] = payTime.split(':').map(Number);
@@ -337,7 +343,8 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
       state = { version: 1, settings: {
         budgetHistory: [{ at: 0, amount: budget, scope: 'permanent' }],
         resetTimeHistory: [{ at: 0, hour: rh, minute: rm }],
-        scheduleHistory: [{ at: 0, startDate: start, resetAt }]
+        scheduleHistory: [{ at: 0, startDate: start, resetAt }],
+        weekendHistory: [{ at: 0, amount: bump }]
       }, entries: [] };
     } else {
       const now = Date.now(), s = state.settings;
@@ -347,6 +354,7 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
         s.budgetHistory.push({ at: now, amount: budget, scope: 'period', until: E.nextPeriodBoundary(s, now) ?? 8.64e15 });
       else if (scope === 'permanent' && (budget !== prefill.budget || overrideActive))
         s.budgetHistory.push({ at: now, amount: budget, scope: 'permanent' });
+      if (bump !== prefill.bump) { s.weekendHistory = s.weekendHistory || []; s.weekendHistory.push({ at: now, amount: bump }); }
       if (reset !== prefill.reset) s.resetTimeHistory.push({ at: now, hour: rh, minute: rm });
       if (start !== prefill.start || payDate !== prefill.payDate || payTime !== prefill.payTime)
         s.scheduleHistory.push({ at: now, startDate: start, resetAt });
@@ -356,9 +364,11 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 
   // ---------- start fresh ----------
   $('sFresh').addEventListener('click', () => {
+    const bump = $('sWeekend').value.trim() === '' ? 0 : toCents($('sWeekend').value);
     const budget = toCents($('sBudget').value), reset = $('sReset').value, start = $('sStart').value,
           payDate = $('sPayDate').value, payTime = $('sPayTime').value;
     if (!(budget > 0)) return showErr('Enter a daily budget greater than $0.');
+    if (!(bump >= 0)) return showErr('Weekend bump must be $0 or more.');
     if (!reset || !start || !payDate || !payTime) return showErr('Fill in every field.');
     const [rh, rm] = reset.split(':').map(Number);
     const [py, pm, pd] = payDate.split('-').map(Number); const [ph, pmi] = payTime.split(':').map(Number);
@@ -368,7 +378,8 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     state.settings = {
       budgetHistory: [{ at: 0, amount: budget, scope: 'permanent' }],
       resetTimeHistory: [{ at: 0, hour: rh, minute: rm }],
-      scheduleHistory: [{ at: 0, startDate: start, resetAt }]
+      scheduleHistory: [{ at: 0, startDate: start, resetAt }],
+      weekendHistory: [{ at: 0, amount: bump }]
     };
     save(); $('settingsBg').classList.remove('show'); render(); renderEntry(); toast('Started fresh');
   });
@@ -391,11 +402,14 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
       const end = d.endBalance;
       wrap.innerHTML = `<div class="dayhead"><div class="d"></div><div class="s"></div></div>`;
       wrap.querySelector('.d').textContent = (i === 0 ? 'Today' : dFmt.format(d.start));
+      if (d.weekend && d.bump) wrap.querySelector('.d').insertAdjacentHTML('beforeend', '<span class="tag">Weekend</span>');
       if (d.periodReset) wrap.querySelector('.d').insertAdjacentHTML('beforeend', '<span class="tag">Payday reset</span>');
-      wrap.querySelector('.s').innerHTML = `Spent ${money(d.spent)} of ${money(d.budget + d.carryIn)}<br><span class="${end < 0 ? 'neg' : 'pos'}">${i === 0 ? 'Left' : 'Ended'} ${money(end)}</span>`;
+      wrap.querySelector('.s').innerHTML = `Spent ${money(d.spent)} of ${money(d.budget + d.bump + d.carryIn)}<br><span class="${end < 0 ? 'neg' : 'pos'}">${i === 0 ? 'Left' : 'Ended'} ${money(end)}</span>`;
       const list = document.createElement('div'); list.className = 'list';
       if (!d.entries.length) list.innerHTML = '<div class="empty">No spending</div>';
       else d.entries.forEach(e => list.appendChild(entryRow(e)));
+      if (d.bumpDropped) { const n = document.createElement('div'); n.className = 'empty'; n.style.padding = '6px 4px 0'; n.style.textAlign = 'left';
+        n.textContent = `Unused weekend bump of ${money(d.bumpDropped)} removed before Monday`; wrap.appendChild(list); wrap.appendChild(n); body.appendChild(wrap); return; }
       wrap.appendChild(list); body.appendChild(wrap);
     });
     if (h.uncounted.length) {
