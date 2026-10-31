@@ -72,10 +72,10 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .secondary{background:var(--card);border:1px solid var(--line)!important}
 .danger{color:var(--neg);background:var(--card);border:1px solid var(--line)!important}
 .err{color:var(--neg);font-size:14px;min-height:18px;margin:0 0 8px}
-.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 12px);transform:translateX(-50%) translateY(-80px);
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 12px);transform:translateX(-50%) translateY(-20px);
   background:var(--accent);color:var(--accentText);padding:10px 18px;border-radius:999px;font-size:15px;font-weight:600;
-  transition:transform .25s ease;z-index:20}
-.toast.show{transform:translateX(-50%) translateY(0)}
+  opacity:0;visibility:hidden;pointer-events:none;transition:transform .25s ease,opacity .25s ease,visibility 0s linear .25s;z-index:20}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible;transition:transform .25s ease,opacity .25s ease}
 .sechead{display:flex;justify-content:space-between;align-items:center}
 .sechead h3{margin:22px 0 8px} .sechead h2{margin:0;font-size:20px}
 .sechead .link{margin-top:14px}

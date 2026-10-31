@@ -1,5 +1,5 @@
 // Network first, fall back to cache so the app opens offline.
-const CACHE = 'daily-budget-v3';
+const CACHE = 'daily-budget-v4';
 const FILES = ['./', 'index.html', 'engine.js', 'manifest.json', 'icon-180.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
