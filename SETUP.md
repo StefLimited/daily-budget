@@ -63,3 +63,9 @@ To build the Shortcut (Option B):
 6. After a pay period reset with money left over, Remaining starts the new period at just one day's budget. After one with overspending, the negative amount is still there.
 
 These same rules were also verified with 28 automated checks in test.js, including daylight saving time changes.
+
+## Start fresh
+Settings, then Start fresh. It recalculates everything from the start date and values on the Settings screen. Spends before that date stay visible in History under "Before current start" but no longer count. Use this whenever you change the budget or dates and want the numbers redone right away.
+
+## History
+Tap History next to Today. Each day shows what you spent, what you had available, how the day ended, and every spend with its note and time. Tap any spend to edit or delete it. Days with a payday reset are tagged.

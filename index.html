@@ -76,6 +76,16 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   background:var(--accent);color:var(--accentText);padding:10px 18px;border-radius:999px;font-size:15px;font-weight:600;
   transition:transform .25s ease;z-index:20}
 .toast.show{transform:translateX(-50%) translateY(0)}
+.sechead{display:flex;justify-content:space-between;align-items:center}
+.sechead h3{margin:22px 0 8px} .sechead h2{margin:0;font-size:20px}
+.sechead .link{margin-top:14px}
+.link{color:var(--muted);font-size:15px;padding:6px 2px;font-weight:600}
+.fresh{width:100%;height:50px;border-radius:12px;font-weight:600;font-size:16px;margin-top:18px}
+.day{margin-bottom:14px}
+.dayhead{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px}
+.dayhead .d{font-weight:600;font-size:16px}
+.dayhead .s{font-size:13px;color:var(--muted);text-align:right}
+.tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 5px;margin-left:6px}
 .notice{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--muted);margin-top:10px;text-align:center}
 </style>
 </head>
@@ -107,8 +117,16 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 </div>
 <button class="log" id="logBtn" disabled>Log spend</button>
 
-<h3>Today</h3>
+<div class="sechead"><h3>Today</h3><button class="link" id="historyBtn">History ›</button></div>
 <div class="list" id="todayList"></div>
+
+<!-- History sheet -->
+<div class="sheet-bg" id="historyBg">
+  <div class="sheet">
+    <div class="sechead" style="margin-bottom:8px"><h2>History</h2><button class="link" id="historyClose">Done</button></div>
+    <div id="historyBody"></div>
+  </div>
+</div>
 
 <!-- Settings sheet -->
 <div class="sheet-bg" id="settingsBg">
@@ -139,6 +157,10 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     <div class="actions">
       <button class="secondary" id="sCancel">Cancel</button>
       <button class="primary" id="sSave">Save</button>
+    </div>
+    <div id="freshWrap">
+      <button class="danger fresh" id="sFresh">Start fresh</button>
+      <p class="help" style="margin-top:8px">Recalculates everything from the start date above using the values above. Spends before that date stay in History but stop counting.</p>
     </div>
   </div>
 </div>
@@ -278,6 +300,7 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     const first = !state;
     $('settingsTitle').textContent = first ? 'Set up your budget' : 'Settings';
     $('sCancel').style.display = first ? 'none' : '';
+    $('freshWrap').style.display = first ? 'none' : '';
     $('scopeSeg').style.display = first ? 'none' : 'flex';
     if (first) {
       prefill = null;
@@ -329,6 +352,62 @@ h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     }
     save(); $('settingsBg').classList.remove('show'); render(); renderEntry(); toast('Settings saved');
   });
+
+  // ---------- start fresh ----------
+  $('sFresh').addEventListener('click', () => {
+    const budget = toCents($('sBudget').value), reset = $('sReset').value, start = $('sStart').value,
+          payDate = $('sPayDate').value, payTime = $('sPayTime').value;
+    if (!(budget > 0)) return $('sErr').textContent = 'Enter a daily budget greater than $0.';
+    if (!reset || !start || !payDate || !payTime) return $('sErr').textContent = 'Fill in every field.';
+    const [rh, rm] = reset.split(':').map(Number);
+    const [py, pm, pd] = payDate.split('-').map(Number); const [ph, pmi] = payTime.split(':').map(Number);
+    const [sy, sm, sd] = start.split('-').map(Number);
+    const resetAt = E.zoned(py, pm, pd, ph, pmi), startAt = E.zoned(sy, sm, sd, rh, rm);
+    if (resetAt <= startAt) return $('sErr').textContent = 'Pay period reset must be after the start date.';
+    if (!confirm(`Start fresh from ${dtFmt.format(startAt)} with a ${money(budget)} daily budget? Spends before then will stop counting.`)) return;
+    state.settings = {
+      budgetHistory: [{ at: 0, amount: budget, scope: 'permanent' }],
+      resetTimeHistory: [{ at: 0, hour: rh, minute: rm }],
+      scheduleHistory: [{ at: 0, startDate: start, resetAt }]
+    };
+    save(); $('settingsBg').classList.remove('show'); render(); renderEntry(); toast('Started fresh');
+  });
+
+  // ---------- history ----------
+  function entryRow(e, uncounted){
+    const b = document.createElement('button'); b.className = 'row';
+    b.innerHTML = `<div><div class="n"></div><div class="t">${tFmt.format(e.at)}</div></div><div class="a">${money(e.amount)}</div>`;
+    b.querySelector('.n').textContent = e.note || 'Spend';
+    if (uncounted) b.querySelector('.t').textContent = dtFmt.format(e.at);
+    b.addEventListener('click', () => { $('historyBg').classList.remove('show'); openEdit(e.id); });
+    return b;
+  }
+  function renderHistory(){
+    const body = $('historyBody'); body.innerHTML = '';
+    const h = E.history(state, Date.now());
+    if (!h.days.length && !h.uncounted.length) { body.innerHTML = '<div class="empty">Nothing yet</div>'; return; }
+    h.days.forEach((d, i) => {
+      const wrap = document.createElement('div'); wrap.className = 'day';
+      const end = d.endBalance;
+      wrap.innerHTML = `<div class="dayhead"><div class="d"></div><div class="s"></div></div>`;
+      wrap.querySelector('.d').textContent = (i === 0 ? 'Today' : dFmt.format(d.start));
+      if (d.periodReset) wrap.querySelector('.d').insertAdjacentHTML('beforeend', '<span class="tag">Payday reset</span>');
+      wrap.querySelector('.s').innerHTML = `Spent ${money(d.spent)} of ${money(d.budget + d.carryIn)}<br><span class="${end < 0 ? 'neg' : 'pos'}">${i === 0 ? 'Left' : 'Ended'} ${money(end)}</span>`;
+      const list = document.createElement('div'); list.className = 'list';
+      if (!d.entries.length) list.innerHTML = '<div class="empty">No spending</div>';
+      else d.entries.forEach(e => list.appendChild(entryRow(e)));
+      wrap.appendChild(list); body.appendChild(wrap);
+    });
+    if (h.uncounted.length) {
+      const wrap = document.createElement('div'); wrap.className = 'day';
+      wrap.innerHTML = `<div class="dayhead"><div class="d">Before current start</div><div class="s">Not counted</div></div>`;
+      const list = document.createElement('div'); list.className = 'list';
+      h.uncounted.forEach(e => list.appendChild(entryRow(e, true)));
+      wrap.appendChild(list); body.appendChild(wrap);
+    }
+  }
+  $('historyBtn').addEventListener('click', () => { if (!state) return; renderHistory(); $('historyBg').classList.add('show'); });
+  $('historyClose').addEventListener('click', () => $('historyBg').classList.remove('show'));
 
   // ---------- quick log from Shortcut: ?add=12.50&note=coffee ----------
   function handleUrl(){

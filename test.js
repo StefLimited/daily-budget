@@ -85,4 +85,30 @@ check('edit recalculates', E.compute(s, z(2026, 10, 22, 13)).remaining, 4000);
 s.entries = [];
 check('delete recalculates', E.compute(s, z(2026, 10, 22, 13)).remaining, 5000);
 
+// Start fresh: rebuild settings from a new start date; old spends stop counting
+s = base();
+spend(s, z(2026, 10, 23, 12), 9000);
+s.settings = {
+  budgetHistory: [{ at: 0, amount: 4000, scope: 'permanent' }],
+  resetTimeHistory: [{ at: 0, hour: 3, minute: 0 }],
+  scheduleHistory: [{ at: 0, startDate: '2026-10-30', resetAt: z(2026, 11, 5, 23) }]
+};
+check('start fresh: new budget applies on new start day', E.compute(s, z(2026, 10, 30, 17)).remaining, 4000);
+spend(s, z(2026, 10, 30, 12), 1500);
+check('start fresh: new spends count', E.compute(s, z(2026, 10, 30, 17)).remaining, 2500);
+check('start fresh: old spend kept as uncounted', E.history(s, z(2026, 10, 30, 17)).uncounted.length, 1);
+
+// History by day
+s = base();
+spend(s, z(2026, 10, 22, 12), 2000);
+spend(s, z(2026, 10, 23, 9), 7000);
+spend(s, z(2026, 10, 23, 14), 1000);
+const h = E.history(s, z(2026, 10, 24, 10)).days;
+check('history: one row per day, newest first', h.length, 3);
+check('history: Oct 23 spent', h[1].spent, 8000);
+check('history: Oct 23 entries', h[1].entries.length, 2);
+check('history: Oct 23 carry in', h[1].carryIn, 3000);
+check('history: Oct 23 ending balance', h[1].endBalance, 0);
+check('history: today matches compute', h[0].endBalance, E.compute(s, z(2026, 10, 24, 10)).remaining);
+
 console.log(`\n${pass} checks passed`);

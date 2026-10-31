@@ -109,7 +109,7 @@
     const events = [];
     for (const t of periodBoundaries(s, now)) events.push({ t, k: 0 });
     for (const t of dailyBoundaries(s, now)) events.push({ t, k: 1, amt: budgetAt(s, t) });
-    for (const e of state.entries) if (e.at <= now) events.push({ t: e.at, k: 2, amt: e.amount });
+    for (const e of state.entries) if (e.at >= start && e.at <= now) events.push({ t: e.at, k: 2, amt: e.amount });
     events.sort((a, b) => a.t - b.t || a.k - b.k);
 
     let bal = 0, lastDaily = null, carryIn = 0, todayBudget = 0, lastPeriod = null;
@@ -135,6 +135,33 @@
     };
   }
 
-  root.BudgetEngine = { TZ, parts, zoned, addDays, compute, budgetAt, nextPeriodBoundary, trackingStart, dailyBoundaries, periodBoundaries };
+  // Day-by-day history, newest first. Each day: start, budget, carryIn, spent, entries, endBalance.
+  // Spends before the tracking start are returned separately as `uncounted`.
+  function history(state, now) {
+    const s = state.settings;
+    const start = trackingStart(s);
+    const events = [];
+    for (const t of periodBoundaries(s, now)) events.push({ t, k: 0 });
+    for (const t of dailyBoundaries(s, now)) events.push({ t, k: 1, amt: budgetAt(s, t) });
+    for (const e of state.entries) if (e.at >= start && e.at <= now) events.push({ t: e.at, k: 2, e });
+    events.sort((a, b) => a.t - b.t || a.k - b.k);
+    const days = [];
+    let bal = 0, cur = null;
+    for (const ev of events) {
+      if (ev.k === 0) { if (bal > 0) bal = 0; if (cur) cur.periodReset = true; }
+      else if (ev.k === 1) {
+        if (cur) cur.endBalance = bal;
+        cur = { start: ev.t, budget: ev.amt, carryIn: bal, spent: 0, entries: [], periodReset: false };
+        days.push(cur);
+        bal += ev.amt;
+      } else if (cur) { bal -= ev.e.amount; cur.spent += ev.e.amount; cur.entries.push(ev.e); }
+    }
+    if (cur) cur.endBalance = bal;
+    for (const d of days) d.entries.sort((a, b) => b.at - a.at);
+    const uncounted = state.entries.filter(e => e.at < start).sort((a, b) => b.at - a.at);
+    return { days: days.reverse(), uncounted };
+  }
+
+  root.BudgetEngine = { TZ, parts, zoned, addDays, compute, history, budgetAt, nextPeriodBoundary, trackingStart, dailyBoundaries, periodBoundaries };
   if (typeof module !== 'undefined') module.exports = root.BudgetEngine;
 })(typeof window !== 'undefined' ? window : globalThis);
