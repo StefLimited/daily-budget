@@ -129,7 +129,7 @@ check('unused bump dropped at Monday', E.compute(s, z(2026, 10, 26, 10)).remaini
 s = wk();
 spend(s, z(2026, 10, 24, 12), 6000);
 spend(s, z(2026, 10, 25, 12), 9000);
-check('bump spent first, real base surplus still carries', E.compute(s, z(2026, 10, 26, 10)).remaining, 4000 + 5000);
+check('regular budget spent first, overspend past it uses bump', E.compute(s, z(2026, 10, 26, 10)).remaining, 4000 + 5000);
 s = wk();
 spend(s, z(2026, 10, 23, 12), 12000);
 check('weekday overspend reduces Saturday', E.compute(s, z(2026, 10, 24, 10)).remaining, 0);
@@ -137,5 +137,13 @@ check('debt paid by base, unused bump still dropped', E.compute(s, z(2026, 10, 2
 check('history marks dropped bump on Sunday', E.history(s, z(2026, 10, 26, 10)).days[1].bumpDropped, 4000);
 s = base();
 check('no weekend setting = no bump', E.compute(s, z(2026, 10, 24, 10)).todayBudget, 5000);
+
+// Stefan's weekend: $35/day, $35 bump, Friday unspent, spent $90 over Sat+Sun
+s = { settings: { budgetHistory: [{ at: 0, amount: 3500, scope: 'permanent' }], resetTimeHistory: [{ at: 0, hour: 3, minute: 0 }],
+  scheduleHistory: [{ at: 0, startDate: '2026-10-30', resetAt: z(2026, 10, 29, 23) }], weekendHistory: [{ at: 0, amount: 3500 }] }, entries: [] };
+spend(s, z(2026, 10, 31, 14), 5000);
+spend(s, z(2026, 11, 1, 14), 4000);
+check('weekend $90 of $140: $50 unspent bump removed', E.history(s, z(2026, 11, 2, 10)).days[1].bumpDropped, 5000);
+check('Monday = Friday leftover $35 + today $35', E.compute(s, z(2026, 11, 2, 10)).remaining, 7000);
 
 console.log(`\n${pass} checks passed`);

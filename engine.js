@@ -114,9 +114,9 @@
   function weekday(t) { const p = parts(t); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); }
 
   // Single pass over pay resets, daily credits and spends.
-  // Weekend bump rules: spending uses the bump first; whatever bump is still unspent when
-  // the next weekday starts is removed, so it never carries into the week. Overspending
-  // carried in from the week still reduces the weekend.
+  // Weekend bump rules: weekend spending counts against the weekend's regular daily budgets first,
+  // then the bump. Whatever bump is unspent when the next weekday starts is removed, so it never
+  // carries into the week. Overspending carried in from the week still reduces the weekend.
   function walk(state, now) {
     const s = state.settings;
     const start = trackingStart(s);
@@ -129,28 +129,29 @@
     for (const e of state.entries) if (e.at >= start && e.at <= now) events.push({ t: e.at, k: 2, e });
     events.sort((a, b) => a.t - b.t || a.k - b.k);
     const days = [];
-    let bal = 0, pool = 0, cur = null, lastPeriod = null;
+    let bal = 0, pool = 0, wkBase = 0, wkSpend = 0, cur = null, lastPeriod = null;
     for (const ev of events) {
       if (ev.k === 0) {
         if (bal > 0) bal = 0;
-        pool = Math.min(pool, Math.max(bal, 0));
         lastPeriod = ev.t;
         if (cur) cur.periodReset = true;
       } else if (ev.k === 1) {
         if (!ev.weekend && pool > 0) {
-          const dropped = Math.min(Math.max(bal, 0), pool);
-          bal -= dropped; pool = 0;
+          const unspentBump = Math.max(0, pool - Math.max(0, wkSpend - wkBase));
+          const dropped = Math.min(Math.max(bal, 0), unspentBump);
+          bal -= dropped;
           if (cur) cur.bumpDropped = dropped;
         }
+        if (!ev.weekend) { pool = 0; wkBase = 0; wkSpend = 0; }
         if (cur) cur.endBalance = bal;
         cur = { start: ev.t, budget: ev.amt, bump: ev.bump, weekend: ev.weekend, carryIn: bal, spent: 0,
                 entries: [], periodReset: false, bumpDropped: 0 };
         days.push(cur);
         bal += ev.amt + ev.bump;
-        pool += ev.bump;
+        if (ev.weekend) { pool += ev.bump; wkBase += ev.amt; }
       } else if (cur) {
         bal -= ev.e.amount; cur.spent += ev.e.amount; cur.entries.push(ev.e);
-        pool -= Math.min(pool, ev.e.amount);
+        if (cur.weekend) wkSpend += ev.e.amount;
       }
     }
     if (cur) cur.endBalance = bal;
